@@ -1,0 +1,19 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  client_session_id: fixture-session-one
+  started_at: 2026-09-26 14:00:00
+  ended_at: 2026-09-26 14:45:00
+  duration_seconds: 2700
+  subject: New Testament
+  chapter: Romans 8
+  notes: Fixture session one
+  metadata: '{"focus_mode":true}'
+
+two:
+  client_session_id: fixture-session-two
+  started_at: 2026-09-27 09:00:00
+  ended_at: 2026-09-27 09:30:00
+  duration_seconds: 1800
+  subject: Psalms
+  chapter: Psalm 23

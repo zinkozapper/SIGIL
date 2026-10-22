@@ -1,0 +1,22 @@
+services:
+  sigil-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sigil-api:local
+    environment:
+      RAILS_MASTER_KEY: ${RAILS_MASTER_KEY:?Set RAILS_MASTER_KEY before starting}
+    ports:
+      - "${SIGIL_PORT:-3000}:80"
+    volumes:
+      - sigil_storage:/rails/storage
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://localhost/up || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  sigil_storage:

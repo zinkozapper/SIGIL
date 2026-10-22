@@ -1,0 +1,254 @@
+/*
+ * This is a manifest file that'll be compiled into application.css.
+ *
+ * With Propshaft, assets are served efficiently without preprocessing steps. You can still include
+ * application-wide styles in this file, but keep in mind that CSS precedence will follow the standard
+ * cascading order, meaning styles declared later in the document or manifest will override earlier ones,
+ * depending on specificity.
+ *
+ * Consider organizing styles into separate files for maintainability.
+ */
+
+:root {
+  --ink: #1b1b1a;
+  --muted: #73736d;
+  --paper: #f5f3ed;
+  --panel: #fffefa;
+  --line: #dedbd1;
+  --accent: #3f5d4b;
+  --accent-soft: #dbe6dd;
+  --shadow: 0 18px 45px rgba(38, 45, 36, 0.08);
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--paper);
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.dashboard-shell {
+  width: min(1120px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 56px 0 80px;
+}
+
+.dashboard-header,
+.panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.eyebrow,
+.metric-label,
+.panel-caption,
+.dashboard-badge {
+  margin: 0;
+  color: var(--muted);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  margin-bottom: 10px;
+  font-size: clamp(2.4rem, 5vw, 4.6rem);
+  font-weight: 500;
+  letter-spacing: -0.05em;
+  line-height: 0.95;
+}
+
+h2 {
+  margin-bottom: 0;
+  font-size: 1.7rem;
+  font-weight: 500;
+}
+
+.dashboard-subtitle {
+  color: var(--muted);
+  font-size: 1.05rem;
+}
+
+.dashboard-badge {
+  padding: 8px 12px;
+  color: var(--accent);
+  border: 1px solid var(--accent-soft);
+  border-radius: 999px;
+  background: var(--accent-soft);
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr;
+  gap: 16px;
+  margin: 42px 0 16px;
+}
+
+.metric-card,
+.dashboard-panel {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.metric-card {
+  padding: 26px;
+}
+
+.metric-card-primary {
+  color: #f7f4ec;
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.metric-card-primary .metric-label,
+.metric-card-primary .metric-detail {
+  color: #d9e4d9;
+}
+
+.metric-value {
+  margin: 14px 0 8px;
+  font-size: clamp(2rem, 4vw, 3.3rem);
+  letter-spacing: -0.05em;
+}
+
+.metric-detail {
+  margin-bottom: 0;
+  color: var(--muted);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.82rem;
+}
+
+.dashboard-panel {
+  margin-top: 16px;
+  padding: 28px;
+}
+
+.panel-heading {
+  align-items: baseline;
+  margin-bottom: 26px;
+}
+
+.activity-chart {
+  display: grid;
+  grid-template-columns: repeat(14, minmax(20px, 1fr));
+  align-items: end;
+  gap: 10px;
+  min-height: 190px;
+}
+
+.chart-column {
+  display: grid;
+  grid-template-rows: 18px 1fr 22px;
+  gap: 5px;
+  height: 190px;
+  text-align: center;
+}
+
+.chart-value,
+.chart-label {
+  color: var(--muted);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.68rem;
+}
+
+.chart-bar-track {
+  display: flex;
+  align-items: end;
+  height: 100%;
+  border-bottom: 1px solid var(--line);
+}
+
+.chart-bar {
+  width: 100%;
+  min-height: 4px;
+  border-radius: 5px 5px 0 0;
+  background: var(--accent);
+}
+
+.table-wrapper {
+  overflow-x: auto;
+}
+
+.sessions-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.88rem;
+}
+
+.sessions-table th {
+  color: var(--muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.sessions-table th,
+.sessions-table td {
+  padding: 15px 10px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.sessions-table th:first-child,
+.sessions-table td:first-child {
+  padding-left: 0;
+}
+
+.sessions-table th:last-child,
+.sessions-table td:last-child {
+  padding-right: 0;
+  text-align: right;
+}
+
+.empty-state {
+  padding: 30px 0 8px;
+  color: var(--muted);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+.empty-state p:last-child {
+  margin-bottom: 0;
+  font-size: 0.88rem;
+}
+
+@media (max-width: 760px) {
+  .dashboard-shell {
+    width: min(100% - 24px, 600px);
+    padding-top: 32px;
+  }
+
+  .dashboard-header {
+    display: block;
+  }
+
+  .dashboard-badge {
+    display: inline-block;
+    margin-top: 18px;
+  }
+
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-panel {
+    padding: 20px 16px;
+  }
+
+  .activity-chart {
+    gap: 4px;
+  }
+}

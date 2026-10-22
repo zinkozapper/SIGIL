@@ -1,0 +1,99 @@
+<% content_for :title, "Dashboard | SIGIL" %>
+
+<main class="dashboard-shell">
+  <header class="dashboard-header">
+    <div>
+      <p class="eyebrow">SIGIL / study intelligence</p>
+      <h1>Study dashboard</h1>
+      <p class="dashboard-subtitle">A quiet view of the sessions you have completed.</p>
+    </div>
+    <div class="dashboard-badge">LIVE DATA</div>
+  </header>
+
+  <section class="metrics-grid" aria-label="Study totals">
+    <article class="metric-card metric-card-primary">
+      <p class="metric-label">Total study time</p>
+      <p class="metric-value"><%= format_duration(@total_duration_seconds) %></p>
+      <p class="metric-detail">Across all completed sessions</p>
+    </article>
+
+    <article class="metric-card">
+      <p class="metric-label">Sessions</p>
+      <p class="metric-value"><%= number_with_delimiter(@total_sessions) %></p>
+      <p class="metric-detail">Completed and received by the API</p>
+    </article>
+
+    <article class="metric-card">
+      <p class="metric-label">Average session</p>
+      <p class="metric-value"><%= format_duration(@average_duration_seconds) %></p>
+      <p class="metric-detail">Calculated from stored durations</p>
+    </article>
+  </section>
+
+  <section class="dashboard-panel">
+    <div class="panel-heading">
+      <div>
+        <p class="eyebrow">Last 14 days</p>
+        <h2>Study rhythm</h2>
+      </div>
+      <p class="panel-caption">Minutes per day</p>
+    </div>
+
+    <div class="activity-chart" role="img" aria-label="Study time for the last 14 days">
+      <% @daily_activity.each do |day| %>
+        <% bar_height = (day[:duration_seconds].to_f / @max_daily_duration_seconds * 100).round %>
+        <div class="chart-column">
+          <div class="chart-bar-track">
+            <div
+              class="chart-bar"
+              style="height: <%= [bar_height, 2].max %>%"
+              title="<%= day[:date].strftime("%B %-d") %>: <%= format_duration(day[:duration_seconds]) %>">
+            </div>
+          </div>
+          <span class="chart-value"><%= day[:session_count].positive? ? day[:session_count] : "" %></span>
+          <span class="chart-label"><%= day[:date].strftime("%a") %></span>
+        </div>
+      <% end %>
+    </div>
+  </section>
+
+  <section class="dashboard-panel">
+    <div class="panel-heading">
+      <div>
+        <p class="eyebrow">History</p>
+        <h2>Recent sessions</h2>
+      </div>
+      <p class="panel-caption"><%= @recent_sessions.size %> shown</p>
+    </div>
+
+    <% if @recent_sessions.any? %>
+      <div class="table-wrapper">
+        <table class="sessions-table">
+          <thead>
+            <tr>
+              <th scope="col">Started</th>
+              <th scope="col">Subject</th>
+              <th scope="col">Chapter</th>
+              <th scope="col">Duration</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% @recent_sessions.each do |session| %>
+              <tr>
+                <td><%= session.started_at.in_time_zone.strftime("%b %-d, %Y %H:%M") %></td>
+                <td><%= session.subject.presence || "—" %></td>
+                <td><%= session.chapter.presence || "—" %></td>
+                <td><%= format_duration(session.duration_seconds) %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% else %>
+      <div class="empty-state">
+        <p>No completed sessions yet.</p>
+        <p>Your first NFC-triggered session will appear here.</p>
+      </div>
+    <% end %>
+  </section>
+</main>
