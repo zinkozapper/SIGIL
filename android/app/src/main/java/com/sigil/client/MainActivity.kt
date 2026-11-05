@@ -168,10 +168,17 @@ class MainActivity : Activity() {
             sessionStore.markStoppedAt()
             Toast.makeText(this, "Session stopped", Toast.LENGTH_SHORT).show()
         } else {
-            // Already stopped but not yet submitted. 
-            // Let's allow restarting the session by tapping again.
-            sessionStore.startSession()
-            Toast.makeText(this, "Session restarted", Toast.LENGTH_SHORT).show()
+            val completed = sessionStore.completeSession(
+                subject = subjectField.text.toString(),
+                chapter = chapterField.text.toString(),
+                notes = notesField.text.toString()
+            )
+            if (completed == null) {
+                Toast.makeText(this, "Could not complete session", Toast.LENGTH_SHORT).show()
+            } else {
+                SyncWorker.enqueue(this)
+                Toast.makeText(this, "Session submitted", Toast.LENGTH_SHORT).show()
+            }
         }
         updateUI()
     }
