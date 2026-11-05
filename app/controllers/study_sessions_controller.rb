@@ -41,7 +41,7 @@ class StudySessionsController < ApplicationController
       :subject,
       :chapter,
       :notes,
-      { metadata: {} }
+      metadata: {}
     )
   end
 end
