@@ -1,6 +1,8 @@
 package com.sigil.client.data
 
 import android.content.Context
+import android.os.SystemClock
+import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -18,6 +20,7 @@ class SessionStore(context: Context) {
     fun startSession(startedAtMillis: Long = System.currentTimeMillis()) {
         preferences.edit()
             .putLong(ACTIVE_STARTED_AT, startedAtMillis)
+            .putLong(ACTIVE_STARTED_ELAPSED, SystemClock.elapsedRealtime())
             .apply()
     }
 
@@ -29,8 +32,12 @@ class SessionStore(context: Context) {
 
     @Synchronized
     fun markStoppedAt(stoppedAtMillis: Long = System.currentTimeMillis()) {
+        val startedAtMillis = activeStartedAtMillis() ?: return
+        val startedElapsed = preferences.getLong(ACTIVE_STARTED_ELAPSED, -1L)
+        val elapsed = if (startedElapsed >= 0) SystemClock.elapsedRealtime() - startedElapsed else -1L
+        val monotonicEnd = if (elapsed >= 0) startedAtMillis + elapsed else stoppedAtMillis
         preferences.edit()
-            .putLong(STOPPED_AT, stoppedAtMillis)
+            .putLong(STOPPED_AT, maxOf(startedAtMillis, monotonicEnd))
             .apply()
     }
 
@@ -42,7 +49,10 @@ class SessionStore(context: Context) {
         endedAtMillis: Long? = null
     ): PendingSession? {
         val startedAtMillis = activeStartedAtMillis() ?: return null
-        val endedAt = endedAtMillis ?: stoppedAtMillis() ?: System.currentTimeMillis()
+        val endedAt = maxOf(
+            startedAtMillis,
+            endedAtMillis ?: stoppedAtMillis() ?: System.currentTimeMillis()
+        )
         val session = PendingSession(
             clientSessionId = UUID.randomUUID().toString(),
             startedAtMillis = startedAtMillis,
@@ -55,7 +65,11 @@ class SessionStore(context: Context) {
         val updatedOutbox = pendingSessions().toMutableList()
         updatedOutbox += session
         savePendingSessions(updatedOutbox)
-        preferences.edit().remove(ACTIVE_STARTED_AT).remove(STOPPED_AT).apply()
+        preferences.edit()
+            .remove(ACTIVE_STARTED_AT)
+            .remove(ACTIVE_STARTED_ELAPSED)
+            .remove(STOPPED_AT)
+            .apply()
         return session
     }
 
@@ -64,21 +78,30 @@ class SessionStore(context: Context) {
         val stored = preferences.getString(OUTBOX, "[]") ?: "[]"
         val json = JSONArray(stored)
 
-        return buildList {
+        var repairedClockSkew = false
+        val sessions = buildList {
             for (index in 0 until json.length()) {
                 val item = json.getJSONObject(index)
-                add(
-                    PendingSession(
-                        clientSessionId = item.getString("client_session_id"),
-                        startedAtMillis = item.getLong("started_at_millis"),
-                        endedAtMillis = item.getLong("ended_at_millis"),
-                        subject = item.optionalString("subject"),
-                        chapter = item.optionalString("chapter"),
-                        notes = item.optionalString("notes")
-                    )
+                val session = PendingSession(
+                    clientSessionId = item.getString("client_session_id"),
+                    startedAtMillis = item.getLong("started_at_millis"),
+                    endedAtMillis = item.getLong("ended_at_millis"),
+                    subject = item.optionalString("subject"),
+                    chapter = item.optionalString("chapter"),
+                    notes = item.optionalString("notes")
                 )
+                if (session.endedAtMillis < session.startedAtMillis) {
+                    // shortcut: old clock-skewed entries become zero-duration; their actual end time is unrecoverable.
+                    repairedClockSkew = true
+                    Log.w(TAG, "Repairing reversed timestamps session=${session.clientSessionId}")
+                    add(session.copy(endedAtMillis = session.startedAtMillis))
+                } else {
+                    add(session)
+                }
             }
         }
+        if (repairedClockSkew) savePendingSessions(sessions)
+        return sessions
     }
 
     @Synchronized
@@ -114,8 +137,10 @@ class SessionStore(context: Context) {
     private fun String?.clean(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
 
     private companion object {
+        const val TAG = "SigilSync"
         const val PREFERENCES_NAME = "sigil_client"
         const val ACTIVE_STARTED_AT = "active_started_at"
+        const val ACTIVE_STARTED_ELAPSED = "active_started_elapsed"
         const val STOPPED_AT = "stopped_at"
         const val OUTBOX = "completed_session_outbox"
     }

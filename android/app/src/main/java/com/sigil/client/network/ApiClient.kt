@@ -19,7 +19,12 @@ class ApiClient(private val baseUrl: String) {
 
     fun submit(session: PendingSession): SubmitResult {
         val endpoint = baseUrl.trimEnd('/') + "/sessions"
-        Log.i(TAG, "POST $endpoint session=${session.clientSessionId}")
+        val payload = session.toRequestJson()
+        Log.i(
+            TAG,
+            "POST $endpoint session=${session.clientSessionId} " +
+                "fields=${payload.keys().asSequence().joinToString(",")}"
+        )
         val connection = try {
             (URL(endpoint).openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
@@ -36,7 +41,7 @@ class ApiClient(private val baseUrl: String) {
 
         return try {
             connection.outputStream.use { output ->
-                output.write(session.toRequestJson().toString().toByteArray(Charsets.UTF_8))
+                output.write(payload.toString().toByteArray(Charsets.UTF_8))
             }
 
             val code = connection.responseCode
