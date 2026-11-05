@@ -4,20 +4,25 @@ class StudySessionsController < ApplicationController
   skip_forgery_protection only: :create
 
   def create
+    attributes = session_params
     study_session = StudySession.find_or_initialize_by(
-      client_session_id: session_params[:client_session_id]
+      client_session_id: attributes[:client_session_id]
     )
 
     if study_session.persisted?
       Rails.logger.info("SIGIL session duplicate request_id=#{request.request_id} client_session_id=#{study_session.client_session_id}")
       render json: study_session, status: :ok
-    elsif study_session.save
-      Rails.logger.info("SIGIL session created request_id=#{request.request_id} client_session_id=#{study_session.client_session_id}")
-      render json: study_session, status: :created
     else
-      Rails.logger.warn("SIGIL session invalid request_id=#{request.request_id} error_fields=#{study_session.errors.attribute_names.uniq.join(',')}")
-      render json: { errors: study_session.errors.to_hash },
-             status: :unprocessable_entity
+      study_session.assign_attributes(attributes)
+
+      if study_session.save
+        Rails.logger.info("SIGIL session created request_id=#{request.request_id} client_session_id=#{study_session.client_session_id}")
+        render json: study_session, status: :created
+      else
+        Rails.logger.warn("SIGIL session invalid request_id=#{request.request_id} error_fields=#{study_session.errors.attribute_names.uniq.join(',')}")
+        render json: { errors: study_session.errors.to_hash },
+               status: :unprocessable_entity
+      end
     end
   rescue ActiveRecord::RecordNotUnique
     # The unique database index wins if two retries arrive at the same time.
