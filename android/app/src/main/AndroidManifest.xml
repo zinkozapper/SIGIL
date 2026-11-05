@@ -47,5 +47,7 @@
                     android:host="tap" />
             </intent-filter>
         </activity>
+
+        <activity android:name=".SuccessActivity" />
     </application>
 </manifest>

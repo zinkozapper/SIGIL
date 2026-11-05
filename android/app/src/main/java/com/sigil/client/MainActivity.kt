@@ -89,7 +89,8 @@ class MainActivity : Activity() {
                     Toast.makeText(this@MainActivity, "No active session to complete.", Toast.LENGTH_SHORT).show()
                 } else {
                     SyncWorker.enqueue(this@MainActivity)
-                    Toast.makeText(this@MainActivity, "Session submitted", Toast.LENGTH_SHORT).show()
+                    val intent = Intent(this@MainActivity, SuccessActivity::class.java)
+                    startActivity(intent)
                 }
                 updateUI()
             }
@@ -177,7 +178,8 @@ class MainActivity : Activity() {
                 Toast.makeText(this, "Could not complete session", Toast.LENGTH_SHORT).show()
             } else {
                 SyncWorker.enqueue(this)
-                Toast.makeText(this, "Session submitted", Toast.LENGTH_SHORT).show()
+                val intent = Intent(this, SuccessActivity::class.java)
+                startActivity(intent)
             }
         }
         updateUI()
