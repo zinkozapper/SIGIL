@@ -24,12 +24,13 @@ import java.util.Date
 
 class MainActivity : Activity() {
     private lateinit var sessionStore: SessionStore
-    private lateinit var statusView: TextView
-    private lateinit var sessionView: TextView
-    private lateinit var outboxView: TextView
+    private lateinit var mainLayout: LinearLayout
+    private lateinit var statusText: TextView
+    private lateinit var surveyContainer: LinearLayout
     private lateinit var subjectField: EditText
     private lateinit var chapterField: EditText
     private lateinit var notesField: EditText
+    private lateinit var outboxView: TextView
     private var lastNfcTapMillis = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,62 +39,105 @@ class MainActivity : Activity() {
         sessionStore = SessionStore(applicationContext)
         setContentView(buildContentView())
         handleNfcIntent(intent)
-        refreshStatus()
+        updateUI()
         SyncWorker.enqueue(this)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (handleNfcIntent(intent)) refreshStatus()
+        if (handleNfcIntent(intent)) updateUI()
     }
 
     private fun buildContentView(): View {
         val scrollView = ScrollView(this)
-        val content = LinearLayout(this).apply {
+        mainLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), dp(28), dp(24), dp(32))
+            setPadding(dp(24), dp(40), dp(24), dp(40))
         }
-        scrollView.addView(content)
+        scrollView.addView(mainLayout)
 
-        content.addView(label("SIGIL"))
-        content.addView(title("Study session"))
-        content.addView(body("Tap the NFC tag once to start. Tap it again to finish and queue the completed session."))
+        statusText = TextView(this).apply {
+            textSize = 34f
+            gravity = Gravity.CENTER
+            setPadding(0, dp(20), 0, dp(20))
+        }
+        mainLayout.addView(statusText)
 
-        statusView = body("")
-        statusView.setPadding(0, dp(22), 0, dp(4))
-        content.addView(statusView)
-
-        sessionView = body("")
-        content.addView(sessionView)
-
+        surveyContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+        }
+        
         subjectField = field("Subject (optional)")
         chapterField = field("Chapter (optional)")
         notesField = field("Notes (optional)")
-        content.addView(subjectField)
-        content.addView(chapterField)
-        content.addView(notesField)
+        
+        surveyContainer.addView(subjectField)
+        surveyContainer.addView(chapterField)
+        surveyContainer.addView(notesField)
+
+        val submitButton = Button(this).apply {
+            text = "Submit"
+            setOnClickListener {
+                val completed = sessionStore.completeSession(
+                    subject = subjectField.text.toString(),
+                    chapter = chapterField.text.toString(),
+                    notes = notesField.text.toString()
+                )
+                if (completed == null) {
+                    Toast.makeText(this@MainActivity, "No active session to complete.", Toast.LENGTH_SHORT).show()
+                } else {
+                    SyncWorker.enqueue(this@MainActivity)
+                    Toast.makeText(this@MainActivity, "Session submitted", Toast.LENGTH_SHORT).show()
+                }
+                updateUI()
+            }
+        }
+        surveyContainer.addView(submitButton, marginParams(top = 20))
+        mainLayout.addView(surveyContainer)
 
         val syncButton = Button(this).apply {
             text = "Sync pending sessions"
             setOnClickListener {
                 SyncWorker.enqueue(this@MainActivity)
-                setStatus("Sync queued.")
+                Toast.makeText(this@MainActivity, "Sync queued.", Toast.LENGTH_SHORT).show()
             }
         }
-        content.addView(syncButton, marginParams(top = 20))
+        mainLayout.addView(syncButton, marginParams(top = 40))
 
-        outboxView = body("")
-        outboxView.setPadding(0, dp(20), 0, 0)
-        content.addView(outboxView)
-
-        val apiView = body("API: " + BuildConfig.API_BASE_URL)
-        apiView.setTextSize(12f)
-        apiView.setTextColor(0xff666660.toInt())
-        apiView.setPadding(0, dp(12), 0, 0)
-        content.addView(apiView)
+        outboxView = TextView(this).apply {
+            textSize = 14f
+            setTextColor(0xff666660.toInt())
+            gravity = Gravity.CENTER
+            setPadding(0, dp(20), 0, 0)
+        }
+        mainLayout.addView(outboxView)
 
         return scrollView
+    }
+
+    private fun updateUI() {
+        val activeStartedAt = sessionStore.activeStartedAtMillis()
+        val stoppedAt = sessionStore.stoppedAtMillis()
+
+        val isStarted = activeStartedAt != null && stoppedAt == null
+        val isStopped = activeStartedAt == null || (activeStartedAt != null && stoppedAt != null)
+
+        if (isStarted) {
+            mainLayout.setBackgroundColor(0xffE8F5E9.toInt()) // Light Green
+            statusText.text = "Session Started"
+            statusText.setTextColor(0xff2E7D32.toInt()) // Dark Green
+            surveyContainer.visibility = View.GONE
+        } else {
+            mainLayout.setBackgroundColor(0xffFFEBEE.toInt()) // Light Red
+            statusText.text = "Session stopped"
+            statusText.setTextColor(0xffC62828.toInt()) // Dark Red
+            surveyContainer.visibility = View.VISIBLE
+        }
+
+        outboxView.text = sessionStore.pendingSessions().size.toString() +
+            " completed session(s) waiting to sync."
     }
 
     private fun handleNfcIntent(intent: Intent?): Boolean {
@@ -111,6 +155,25 @@ class MainActivity : Activity() {
         lastNfcTapMillis = now
         toggleSession()
         return true
+    }
+
+    private fun toggleSession() {
+        val activeStartedAt = sessionStore.activeStartedAtMillis()
+        val stoppedAt = sessionStore.stoppedAtMillis()
+
+        if (activeStartedAt == null) {
+            sessionStore.startSession()
+            Toast.makeText(this, "Session started", Toast.LENGTH_SHORT).show()
+        } else if (stoppedAt == null) {
+            sessionStore.markStoppedAt()
+            Toast.makeText(this, "Session stopped", Toast.LENGTH_SHORT).show()
+        } else {
+            // Already stopped but not yet submitted. 
+            // Let's allow restarting the session by tapping again.
+            sessionStore.startSession()
+            Toast.makeText(this, "Session restarted", Toast.LENGTH_SHORT).show()
+        }
+        updateUI()
     }
 
     private fun containsSigilRecord(intent: Intent): Boolean {
@@ -133,67 +196,6 @@ class MainActivity : Activity() {
                     String(record.payload, Charsets.UTF_8).contains("SIGIL_TAP")
             }
         }
-    }
-
-    private fun toggleSession() {
-        if (sessionStore.activeStartedAtMillis() == null) {
-            sessionStore.startSession()
-            setStatus("Session started. Tap the tag again when you finish.")
-        } else {
-            val completed = sessionStore.completeSession(
-                subject = subjectField.text.toString(),
-                chapter = chapterField.text.toString(),
-                notes = notesField.text.toString()
-            )
-            if (completed == null) {
-                setStatus("Could not finish the session. Please try again.")
-            } else {
-                SyncWorker.enqueue(this)
-                setStatus("Session saved locally. Sync will retry automatically.")
-                Toast.makeText(this, "Session complete", Toast.LENGTH_SHORT).show()
-            }
-        }
-        refreshStatus()
-    }
-
-    private fun refreshStatus() {
-        val activeStartedAt = sessionStore.activeStartedAtMillis()
-        if (activeStartedAt == null) {
-            sessionView.text = "No active session."
-        } else {
-            val started = DateFormat.getDateTimeInstance(
-                DateFormat.MEDIUM,
-                DateFormat.SHORT
-            ).format(Date(activeStartedAt))
-            sessionView.text = "Active since $started"
-        }
-        outboxView.text = sessionStore.pendingSessions().size.toString() +
-            " completed session(s) waiting to sync."
-    }
-
-    private fun setStatus(message: String) {
-        statusView.text = message
-        Handler(Looper.getMainLooper()).postDelayed({ refreshStatus() }, 100)
-    }
-
-    private fun label(text: String) = TextView(this).apply {
-        this.text = text
-        textSize = 12f
-        setTextColor(0xff3f5d4b.toInt())
-        gravity = Gravity.START
-    }
-
-    private fun title(text: String) = TextView(this).apply {
-        this.text = text
-        textSize = 34f
-        setTextColor(0xff1b1b1a.toInt())
-        setPadding(0, dp(6), 0, dp(4))
-    }
-
-    private fun body(text: String) = TextView(this).apply {
-        this.text = text
-        textSize = 16f
-        setTextColor(0xff555550.toInt())
     }
 
     private fun field(hintText: String) = EditText(this).apply {

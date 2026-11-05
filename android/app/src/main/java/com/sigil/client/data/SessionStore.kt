@@ -22,17 +22,31 @@ class SessionStore(context: Context) {
     }
 
     @Synchronized
+    fun stoppedAtMillis(): Long? {
+        if (!preferences.contains(STOPPED_AT)) return null
+        return preferences.getLong(STOPPED_AT, 0L)
+    }
+
+    @Synchronized
+    fun markStoppedAt(stoppedAtMillis: Long = System.currentTimeMillis()) {
+        preferences.edit()
+            .putLong(STOPPED_AT, stoppedAtMillis)
+            .apply()
+    }
+
+    @Synchronized
     fun completeSession(
         subject: String?,
         chapter: String?,
         notes: String?,
-        endedAtMillis: Long = System.currentTimeMillis()
+        endedAtMillis: Long? = null
     ): PendingSession? {
         val startedAtMillis = activeStartedAtMillis() ?: return null
+        val endedAt = endedAtMillis ?: stoppedAtMillis() ?: System.currentTimeMillis()
         val session = PendingSession(
             clientSessionId = UUID.randomUUID().toString(),
             startedAtMillis = startedAtMillis,
-            endedAtMillis = endedAtMillis,
+            endedAtMillis = endedAt,
             subject = subject.clean(),
             chapter = chapter.clean(),
             notes = notes.clean()
@@ -41,7 +55,7 @@ class SessionStore(context: Context) {
         val updatedOutbox = pendingSessions().toMutableList()
         updatedOutbox += session
         savePendingSessions(updatedOutbox)
-        preferences.edit().remove(ACTIVE_STARTED_AT).apply()
+        preferences.edit().remove(ACTIVE_STARTED_AT).remove(STOPPED_AT).apply()
         return session
     }
 
@@ -102,6 +116,7 @@ class SessionStore(context: Context) {
     private companion object {
         const val PREFERENCES_NAME = "sigil_client"
         const val ACTIVE_STARTED_AT = "active_started_at"
+        const val STOPPED_AT = "stopped_at"
         const val OUTBOX = "completed_session_outbox"
     }
 }
