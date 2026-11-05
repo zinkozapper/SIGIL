@@ -6,8 +6,9 @@ services:
     image: sigil-api:local
     environment:
       RAILS_MASTER_KEY: ${RAILS_MASTER_KEY:?Set RAILS_MASTER_KEY before starting}
+      THRUSTER_HTTP_PORT: 8080
     ports:
-      - "${SIGIL_PORT:-3000}:80"
+      - "${SIGIL_PORT:-3000}:8080"
     volumes:
       - sigil_storage:/rails/storage
     restart: unless-stopped

@@ -1,99 +1,95 @@
-# SIGIL API backend
+# SIGIL
 
-SIGIL receives one completed study session from the Android client. Rails
-validates the timestamps, calculates duration_seconds, and stores the record in
-SQLite.
+SIGIL records study sessions started and ended by tapping an NFC tag. The Android app keeps completed sessions in a local outbox and syncs them to a Rails API. A web dashboard summarizes saved sessions.
 
-## Start with Docker
+## Components
 
-From the project directory on the Docker host:
+- `android/` — Android NFC client and offline sync queue. See [Android setup](android/README.md).
+- Rails API — validates completed sessions, calculates duration, and stores data in SQLite.
+- Dashboard — session totals, average duration, 14-day activity, and recent sessions at `/dashboard`.
 
-    export RAILS_MASTER_KEY="$(tr -d '\n' < config/master.key)"
-    docker compose up --build -d
+The phone reaches the API over Tailscale. The API receives completed sessions only; it does not process tap events or run automation.
 
-The API is available on port 3000 by default. Override it with SIGIL_PORT:
+## Run with Docker
 
-    SIGIL_PORT=8080 docker compose up --build -d
+From the project root, provide the Rails credentials key and start the service:
 
-Check the server:
+```sh
+export RAILS_MASTER_KEY="$(tr -d '\n' < config/master.key)"
+docker compose up --build -d
+```
 
-    curl http://localhost:3000/up
+The API listens on port `3000`. Set `SIGIL_PORT` to change the host port:
 
-The Android phone should call the Docker host through its Tailscale address,
-for example http://100.x.y.z:3000/sessions.
+```sh
+SIGIL_PORT=8080 docker compose up --build -d
+```
 
-Useful Docker commands:
+Check health with `curl http://localhost:3000/up`. Open `http://localhost:3000/dashboard` to view activity.
 
-    docker compose logs -f sigil-api
-    docker compose down
+Useful commands:
 
-The named sigil_storage volume keeps SQLite data when the container is removed.
-Use docker compose down -v only when you intend to delete that database.
+```sh
+docker compose logs -f sigil-api
+docker compose down
+```
 
-## Test the API
+Docker stores SQLite data in the `sigil_storage` volume. `docker compose down -v` deletes that data.
 
-    curl --request POST http://localhost:3000/sessions \
-      --header 'Content-Type: application/json' \
-      --data '{
-        "client_session_id": "phone-generated-uuid",
-        "started_at": "2026-09-26T14:00:00Z",
-        "ended_at": "2026-09-26T14:45:00Z",
-        "subject": "New Testament",
-        "chapter": "Romans 8",
-        "notes": "Reviewed the chapter outline",
-        "metadata": {
-          "focus_mode": true,
-          "lighting_profile": "study"
-        }
-      }'
+## API
 
-A new session returns 201, a retry with the same client_session_id returns 200,
-and invalid timestamps return 422.
+`POST /sessions` accepts one completed session as JSON:
 
-## Rails code map
+```json
+{
+  "client_session_id": "phone-generated-uuid",
+  "started_at": "2026-09-26T14:00:00Z",
+  "ended_at": "2026-09-26T14:45:00Z",
+  "subject": "New Testament",
+  "chapter": "Romans 8",
+  "notes": "Reviewed the chapter outline",
+  "metadata": { "focus_mode": true }
+}
+```
 
-- config/routes.rb maps POST /sessions to the controller.
-- app/controllers/study_sessions_controller.rb handles JSON, strong parameters,
-  HTTP status codes, and idempotent retries.
-- app/models/study_session.rb contains validations and the callback that
-  calculates duration before saving.
-- db/migrate/ describes database changes; the unique index protects against
-  concurrent duplicate submissions.
-- test/integration/study_sessions_test.rb tests the public API request flow.
-- compose.yaml builds the Docker image, exposes the API, persists SQLite, and
-  checks the /up health endpoint.
+`client_session_id`, `started_at`, and `ended_at` are required. Subject, chapter, notes, and metadata are optional. The server calculates `duration_seconds` from the timestamps.
 
-With Ruby and Bundler available, run:
+- `201 Created` — session saved.
+- `200 OK` — duplicate session ID; safe to retry.
+- `422 Unprocessable Entity` — invalid or missing values.
 
-    bin/rails db:migrate
-    bin/rails test
-    bin/rubocop
-    bin/brakeman --quiet
+Example request:
 
-## Vertical slice check
+```sh
+curl --request POST http://localhost:3000/sessions \
+  --header 'Content-Type: application/json' \
+  --data '{"client_session_id":"phone-generated-uuid","started_at":"2026-09-26T14:00:00Z","ended_at":"2026-09-26T14:45:00Z"}'
+```
 
-The Rails integration test covers the full request-to-dashboard path:
+## Development
 
-    bin/rails test test/integration/vertical_slice_test.rb
+Requirements: Ruby version from `.ruby-version`, Bundler, and (for Android) Android Studio or Gradle plus Android SDK.
 
-With the API running, the smoke command exercises the same path over HTTP:
+Install dependencies and prepare the database:
 
-    SIGIL_URL=http://localhost:3000 bin/vertical_slice
+```sh
+bin/setup
+```
 
-It submits one completed session, checks the server-calculated duration, retries
-the same client session ID, and confirms the session appears on `/dashboard`.
+Start Rails with `bin/dev`. Run checks with:
 
-## Dashboard
+```sh
+bin/rails test
+bin/rubocop
+bin/brakeman --quiet
+```
 
-Open http://localhost:3000/dashboard from a browser that can reach the Docker
-host. It shows total study time, session count, average duration, a 14-day
-activity chart, and recent completed sessions.
+The integration test for the complete API-to-dashboard path is `bin/rails test test/integration/vertical_slice_test.rb`. With the server running, its HTTP smoke check is:
 
-## Android client
+```sh
+SIGIL_URL=http://localhost:3000 bin/vertical_slice
+```
 
-The Android MVP lives in android/. Read android/README.md for building the
-APK and writing the NFC tag. The tag should contain the NDEF URI sigil://tap.
-The client stores completed sessions locally before attempting synchronization,
-so a temporary Tailscale outage does not lose study data.
+## Android
 
-
+Build and install instructions, NFC tag setup, and sync behavior are in [android/README.md](android/README.md). The preferred tag URI is `sigil://tap`. Configure the app with the Docker host's Tailscale address; do not expose its cleartext HTTP endpoint to public networks.

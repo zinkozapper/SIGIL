@@ -4,13 +4,18 @@ plugins {
 }
 
 val apiBaseUrl = providers.gradleProperty("sigilApiBaseUrl")
-    .orElse("http://100.64.0.1:3000/")
+    .orElse("http://192.168.223.11:3000/")
     .get()
     .let { if (it.endsWith("/")) it else "$it/" }
 
 android {
     namespace = "com.sigil.client"
     compileSdk = 35
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
 
     defaultConfig {
         applicationId = "com.sigil.client"
