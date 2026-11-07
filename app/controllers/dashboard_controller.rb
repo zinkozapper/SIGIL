@@ -10,8 +10,10 @@ class DashboardController < ApplicationController
 
     @recent_sessions = StudySession.order(started_at: :desc).limit(20)
 
-    start_date = 13.days.ago.to_date
-    daily_scope = StudySession.where(started_at: start_date.beginning_of_day..)
+    ranges = { "2w" => 13.days, "1m" => 1.month, "6m" => 6.months, "1y" => 1.year }
+    @range = ranges.key?(params[:range]) ? params[:range] : "2w"
+    start_date = Date.current - ranges.fetch(@range)
+    daily_scope = StudySession.where(started_at: start_date.beginning_of_day..Date.current.end_of_day)
     daily_duration_totals = daily_scope.group("date(started_at)").sum(:duration_seconds)
     daily_session_totals = daily_scope.group("date(started_at)").count
 
@@ -25,9 +27,14 @@ class DashboardController < ApplicationController
       }
     end
 
-    @max_daily_duration_seconds = [
-      @daily_activity.map { |day| day[:duration_seconds] }.max.to_i,
-      1
-    ].max
+    bucket_size = { "2w" => 1, "1m" => 1, "6m" => 7, "1y" => 14 }.fetch(@range)
+    @activity = @daily_activity.each_slice(bucket_size).map do |days|
+      {
+        start_date: days.first[:date],
+        end_date: days.last[:date],
+        duration_seconds: days.sum { |day| day[:duration_seconds] },
+        session_count: days.sum { |day| day[:session_count] }
+      }
+    end
   end
 end

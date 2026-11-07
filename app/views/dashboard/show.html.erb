@@ -33,26 +33,41 @@
   <section class="dashboard-panel">
     <div class="panel-heading">
       <div>
-        <p class="eyebrow">Last 14 days</p>
+        <p class="eyebrow">Your activity</p>
         <h2>Study rhythm</h2>
       </div>
-      <p class="panel-caption">Minutes per day</p>
+      <nav class="range-selector" aria-label="Chart time range">
+        <% { "2w" => "2 weeks", "1m" => "1 month", "6m" => "6 months", "1y" => "1 year" }.each do |value, label| %>
+          <%= link_to label, dashboard_path(range: value), class: ("active" if @range == value), aria: { current: ("page" if @range == value) } %>
+        <% end %>
+      </nav>
     </div>
 
-    <div class="activity-chart" role="img" aria-label="Study time for the last 14 days">
-      <% @daily_activity.each do |day| %>
-        <% bar_height = (day[:duration_seconds].to_f / @max_daily_duration_seconds * 100).round %>
-        <div class="chart-column">
-          <div class="chart-bar-track">
-            <div
-              class="chart-bar"
-              style="height: <%= [bar_height, 2].max %>%"
-              title="<%= day[:date].strftime("%B %-d") %>: <%= format_duration(day[:duration_seconds]) %>">
-            </div>
+    <p class="chart-period"><%= @activity.first[:start_date].strftime("%b %-d, %Y") %> – <%= @activity.last[:end_date].strftime("%b %-d, %Y") %> · <%= @range == "6m" ? "7-day groups" : @range == "1y" ? "14-day groups" : "Daily" %></p>
+    <div class="charts-grid">
+      <% { duration_seconds: "Study time", session_count: "Sessions" }.each do |metric, title| %>
+        <% maximum = [@activity.map { |period| period[metric] }.max.to_i, 1].max %>
+        <section class="chart-card" aria-label="<%= title %>">
+          <div class="chart-heading">
+            <h3><%= title %></h3>
+            <span><%= metric == :duration_seconds ? format_duration(@activity.sum { |period| period[metric] }) : number_with_delimiter(@activity.sum { |period| period[metric] }) %> total</span>
           </div>
-          <span class="chart-value"><%= day[:session_count].positive? ? day[:session_count] : "" %></span>
-          <span class="chart-label"><%= day[:date].strftime("%a") %></span>
-        </div>
+          <div class="activity-chart" style="--columns: <%= @activity.size %>" role="img" aria-label="<%= title %> from <%= @activity.first[:start_date] %> to <%= @activity.last[:end_date] %>">
+            <% @activity.each do |period| %>
+              <% value = period[metric] %>
+              <% description = metric == :duration_seconds ? format_duration(value) : pluralize(value, "session") %>
+              <div class="chart-column">
+                <div class="chart-bar-track">
+                  <div class="chart-bar <%= "chart-bar-sessions" if metric == :session_count %>" style="height: <%= (value.to_f / maximum * 100).round %>%" title="<%= period[:start_date].strftime("%b %-d") %><%= " – #{period[:end_date].strftime("%b %-d")}" if period[:start_date] != period[:end_date] %>: <%= description %>"></div>
+                </div>
+              </div>
+            <% end %>
+          </div>
+          <div class="chart-axis"><span><%= @activity.first[:start_date].strftime("%b %-d") %></span><span><%= @activity.last[:end_date].strftime("%b %-d") %></span></div>
+          <% if @activity.sum { |period| period[metric] }.zero? %>
+            <p class="chart-empty">No activity in this period.</p>
+          <% end %>
+        </section>
       <% end %>
     </div>
   </section>

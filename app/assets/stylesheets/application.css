@@ -142,18 +142,15 @@ h2 {
 
 .activity-chart {
   display: grid;
-  grid-template-columns: repeat(14, minmax(20px, 1fr));
+  grid-template-columns: repeat(var(--columns), minmax(0, 1fr));
   align-items: end;
-  gap: 10px;
-  min-height: 190px;
+  gap: 4px;
+  height: 170px;
+  background: repeating-linear-gradient(to top, transparent 0, transparent 41px, #e8e8df 42px, transparent 43px);
 }
 
 .chart-column {
-  display: grid;
-  grid-template-rows: 18px 1fr 22px;
-  gap: 5px;
-  height: 190px;
-  text-align: center;
+  height: 100%;
 }
 
 .chart-value,
@@ -172,10 +169,44 @@ h2 {
 
 .chart-bar {
   width: 100%;
-  min-height: 4px;
   border-radius: 5px 5px 0 0;
   background: var(--accent);
 }
+
+.range-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: #f1f1e9;
+  font: 600 0.76rem ui-sans-serif, system-ui, sans-serif;
+}
+
+.range-selector a {
+  padding: 9px 12px;
+  color: #555d53;
+  text-decoration: none;
+  border-radius: 8px;
+}
+
+.range-selector a:hover,
+.range-selector a:focus-visible { background: #e0e7dc; }
+.range-selector a.active { color: white; background: var(--accent); }
+
+.chart-period, .chart-heading span, .chart-axis, .chart-empty {
+  color: var(--muted);
+  font: 0.8rem ui-sans-serif, system-ui, sans-serif;
+}
+
+.chart-period { margin: -10px 0 22px; }
+.charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.chart-card { min-width: 0; padding: 20px; border: 1px solid #e9e8df; border-radius: 14px; background: #fafbf7; }
+.chart-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 20px; }
+.chart-heading h3 { margin: 0; font-size: 1.2rem; font-weight: 500; }
+.chart-bar-sessions { background: #bd916b; }
+.chart-axis { display: flex; justify-content: space-between; margin-top: 10px; }
+.chart-empty { margin: 16px 0 0; }
 
 .table-wrapper {
   overflow-x: auto;
@@ -247,6 +278,10 @@ h2 {
   .dashboard-panel {
     padding: 20px 16px;
   }
+
+  .panel-heading { flex-wrap: wrap; }
+  .charts-grid { grid-template-columns: 1fr; }
+  .chart-period { margin-top: 0; }
 
   .activity-chart {
     gap: 4px;
