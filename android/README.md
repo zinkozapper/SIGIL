@@ -8,9 +8,9 @@ Rails API when the network is available.
 
 Open the android directory in Android Studio, or use a local Gradle installation.
 
-Build with the Docker host's Tailscale address:
+Build the app:
 
-    gradle :app:assembleDebug -PsigilApiBaseUrl=http://100.x.y.z:3000/
+    gradle :app:assembleDebug
 
 Install on the phone:
 
@@ -19,6 +19,11 @@ Install on the phone:
 The app intentionally allows cleartext HTTP because the first deployment uses
 a private Tailscale network. Move the API to HTTPS before exposing it beyond
 that private network.
+
+Open SIGIL and enter the server address and port in the separate sync fields
+(for example, `100.x.y.z` and `3000`). Save them to sync pending sessions. The
+address remains saved across app restarts. HTTP is used unless you enter an
+`https://` URL.
 
 ## NFC tag contents
 

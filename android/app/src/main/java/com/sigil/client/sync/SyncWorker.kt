@@ -9,7 +9,6 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import com.sigil.client.BuildConfig
 import com.sigil.client.data.SessionStore
 import com.sigil.client.network.ApiClient
 
@@ -19,8 +18,9 @@ class SyncWorker(
 ) : CoroutineWorker(appContext, workerParameters) {
     override suspend fun doWork(): Result {
         val store = SessionStore(applicationContext)
-        val apiClient = ApiClient(BuildConfig.API_BASE_URL)
         val pending = store.pendingSessions()
+        if (pending.isEmpty()) return Result.success()
+        val apiClient = ApiClient(store.apiBaseUrl() ?: return Result.success())
         Log.i(TAG, "Sync started pending=${pending.size}")
 
         for (session in pending) {
@@ -58,7 +58,7 @@ class SyncWorker(
 
             WorkManager.getInstance(context).enqueueUniqueWork(
                 UNIQUE_WORK_NAME,
-                ExistingWorkPolicy.KEEP,
+                ExistingWorkPolicy.REPLACE,
                 request
             )
         }

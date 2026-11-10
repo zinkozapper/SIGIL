@@ -10,6 +10,12 @@ import java.util.UUID
 class SessionStore(context: Context) {
     private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 
+    fun apiBaseUrl(): String? = preferences.getString("api_base_url", null)
+
+    fun setApiBaseUrl(url: String) {
+        preferences.edit().putString("api_base_url", url).apply()
+    }
+
     @Synchronized
     fun activeStartedAtMillis(): Long? {
         if (!preferences.contains(ACTIVE_STARTED_AT)) return null
@@ -21,7 +27,36 @@ class SessionStore(context: Context) {
         preferences.edit()
             .putLong(ACTIVE_STARTED_AT, startedAtMillis)
             .putLong(ACTIVE_STARTED_ELAPSED, SystemClock.elapsedRealtime())
+            .remove(STOPPED_AT)
+            .remove(STOPPED_WALL_AT)
             .apply()
+    }
+
+    @Synchronized
+    fun cancelSession() {
+        preferences.edit()
+            .remove(ACTIVE_STARTED_AT)
+            .remove(ACTIVE_STARTED_ELAPSED)
+            .remove(STOPPED_AT)
+            .remove(STOPPED_WALL_AT)
+            .apply()
+    }
+
+    @Synchronized
+    fun elapsedSessionMillis(): Long? {
+        val started = activeStartedAtMillis() ?: return null
+        val stopped = stoppedAtMillis()
+        if (stopped != null) return (stopped - started).coerceAtLeast(0)
+        val elapsedStart = preferences.getLong(ACTIVE_STARTED_ELAPSED, -1L)
+        val elapsed = SystemClock.elapsedRealtime() - elapsedStart
+        return if (elapsedStart >= 0 && elapsed >= 0) elapsed else (System.currentTimeMillis() - started).coerceAtLeast(0)
+    }
+
+    @Synchronized
+    fun stoppedSessionExpired(now: Long = System.currentTimeMillis()): Boolean {
+        val stopped = stoppedAtMillis() ?: return false
+        val stoppedWall = preferences.getLong(STOPPED_WALL_AT, stopped)
+        return now - stoppedWall >= 10 * 60 * 1000L
     }
 
     @Synchronized
@@ -33,11 +68,13 @@ class SessionStore(context: Context) {
     @Synchronized
     fun markStoppedAt(stoppedAtMillis: Long = System.currentTimeMillis()) {
         val startedAtMillis = activeStartedAtMillis() ?: return
+        if (this.stoppedAtMillis() != null) return
         val startedElapsed = preferences.getLong(ACTIVE_STARTED_ELAPSED, -1L)
         val elapsed = if (startedElapsed >= 0) SystemClock.elapsedRealtime() - startedElapsed else -1L
         val monotonicEnd = if (elapsed >= 0) startedAtMillis + elapsed else stoppedAtMillis
         preferences.edit()
             .putLong(STOPPED_AT, maxOf(startedAtMillis, monotonicEnd))
+            .putLong(STOPPED_WALL_AT, stoppedAtMillis)
             .apply()
     }
 
@@ -69,6 +106,7 @@ class SessionStore(context: Context) {
             .remove(ACTIVE_STARTED_AT)
             .remove(ACTIVE_STARTED_ELAPSED)
             .remove(STOPPED_AT)
+            .remove(STOPPED_WALL_AT)
             .apply()
         return session
     }
@@ -142,6 +180,7 @@ class SessionStore(context: Context) {
         const val ACTIVE_STARTED_AT = "active_started_at"
         const val ACTIVE_STARTED_ELAPSED = "active_started_elapsed"
         const val STOPPED_AT = "stopped_at"
+        const val STOPPED_WALL_AT = "stopped_wall_at"
         const val OUTBOX = "completed_session_outbox"
     }
 }

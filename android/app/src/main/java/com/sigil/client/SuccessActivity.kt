@@ -31,7 +31,7 @@ class SuccessActivity : Activity() {
         }
 
         val title = TextView(this).apply {
-            text = "Request submitted"
+            text = if (targetSessionId == null) "Sync pending sessions" else "Request submitted"
             textSize = 28f
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, dp(24))
@@ -77,19 +77,19 @@ class SuccessActivity : Activity() {
 
     private fun updateStatus() {
         val pending = sessionStore.pendingSessions()
-        val isSynced = targetSessionId == null || pending.none { it.clientSessionId == targetSessionId }
+        val isSynced = if (targetSessionId == null) pending.isEmpty() else pending.none { it.clientSessionId == targetSessionId }
         
         statusText.text = if (isSynced) {
-            "✅ Session Synced"
+            if (targetSessionId == null) "✅ All sessions synced" else "✅ Session Synced"
         } else {
-            "⏳ Syncing..."
+            if (sessionStore.apiBaseUrl() == null) "Set a sync address to sync pending sessions." else "⏳ Waiting to sync..."
         }
         statusText.setTextColor(if (isSynced) 0xff2E7D32.toInt() else 0xffEF6C00.toInt())
 
         val debugInfo = buildString {
             appendLine("Target ID: ${targetSessionId ?: "N/A"}")
             appendLine("Pending Count: ${pending.size}")
-            appendLine("API: ${com.sigil.client.BuildConfig.API_BASE_URL}")
+            appendLine("API: ${sessionStore.apiBaseUrl() ?: "Not configured"}")
             appendLine("Status: ${if (isSynced) "Synced" else "Pending"}")
         }
         debugText.text = debugInfo

@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
@@ -19,19 +20,28 @@ import android.widget.TextView
 import android.widget.Toast
 import com.sigil.client.data.SessionStore
 import com.sigil.client.sync.SyncWorker
-import java.text.DateFormat
-import java.util.Date
+import java.net.URI
+import java.util.Locale
 
 class MainActivity : Activity() {
     private lateinit var sessionStore: SessionStore
     private lateinit var mainLayout: LinearLayout
     private lateinit var statusText: TextView
+    private lateinit var timerText: TextView
+    private lateinit var cancelButton: Button
     private lateinit var surveyContainer: LinearLayout
     private lateinit var subjectField: EditText
     private lateinit var chapterField: EditText
     private lateinit var notesField: EditText
     private lateinit var outboxView: TextView
     private var lastNfcTapMillis = 0L
+    private val timerHandler = Handler(Looper.getMainLooper())
+    private val timerUpdate = object : Runnable {
+        override fun run() {
+            updateTimer()
+            timerHandler.postDelayed(this, 1_000)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,6 +59,17 @@ class MainActivity : Activity() {
         if (handleNfcIntent(intent)) updateUI()
     }
 
+    override fun onResume() {
+        super.onResume()
+        updateUI()
+        timerHandler.post(timerUpdate)
+    }
+
+    override fun onPause() {
+        timerHandler.removeCallbacks(timerUpdate)
+        super.onPause()
+    }
+
     private fun buildContentView(): View {
         val scrollView = ScrollView(this)
         mainLayout = LinearLayout(this).apply {
@@ -63,6 +84,21 @@ class MainActivity : Activity() {
             setPadding(0, dp(20), 0, dp(20))
         }
         mainLayout.addView(statusText)
+
+        timerText = TextView(this).apply {
+            textSize = 24f
+            gravity = Gravity.CENTER
+        }
+        mainLayout.addView(timerText)
+
+        cancelButton = Button(this).apply {
+            text = "Cancel"
+            setOnClickListener {
+                sessionStore.cancelSession()
+                updateUI()
+            }
+        }
+        mainLayout.addView(cancelButton)
 
         surveyContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -100,11 +136,41 @@ class MainActivity : Activity() {
         surveyContainer.addView(submitButton, marginParams(top = 20))
         mainLayout.addView(surveyContainer)
 
+        val savedServer = sessionStore.apiBaseUrl()?.let { URI(it) }
+        val serverField = field("Server IP or URL").apply {
+            setSingleLine(true)
+            setText(savedServer?.let { "${it.scheme}://${it.host}" }.orEmpty())
+        }
+        val portField = field("Port").apply {
+            setSingleLine(true)
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setText(savedServer?.port?.takeIf { it != -1 }?.toString().orEmpty())
+        }
+        val serverRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            addView(serverField, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 2f))
+            addView(portField, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        }
+        mainLayout.addView(serverRow, marginParams(top = 30))
+        mainLayout.addView(Button(this).apply {
+            text = "Save sync address"
+            setOnClickListener {
+                val url = normalizeServerUrl(serverField.text.toString(), portField.text.toString())
+                if (url == null) {
+                    portField.error = "Enter a valid address and port (1–65535)"
+                } else {
+                    sessionStore.setApiBaseUrl(url)
+                    SyncWorker.enqueue(this@MainActivity)
+                    Toast.makeText(this@MainActivity, "Sync address saved.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        })
+
         val syncButton = Button(this).apply {
             text = "Sync pending sessions"
             setOnClickListener {
                 SyncWorker.enqueue(this@MainActivity)
-                Toast.makeText(this@MainActivity, "Sync queued.", Toast.LENGTH_SHORT).show()
+                startActivity(Intent(this@MainActivity, SuccessActivity::class.java))
             }
         }
         mainLayout.addView(syncButton, marginParams(top = 40))
@@ -125,9 +191,15 @@ class MainActivity : Activity() {
         val stoppedAt = sessionStore.stoppedAtMillis()
 
         val isStarted = activeStartedAt != null && stoppedAt == null
-        val isStopped = activeStartedAt == null || (activeStartedAt != null && stoppedAt != null)
+        cancelButton.visibility = if (isStarted) View.VISIBLE else View.GONE
+        updateTimer()
 
-        if (isStarted) {
+        if (activeStartedAt == null) {
+            mainLayout.setBackgroundColor(0xffFAFAFA.toInt())
+            statusText.text = "Tap your SIGIL tag to start a session"
+            statusText.setTextColor(0xff333333.toInt())
+            surveyContainer.visibility = View.GONE
+        } else if (isStarted) {
             mainLayout.setBackgroundColor(0xffE8F5E9.toInt()) // Light Green
             statusText.text = "Session Started"
             statusText.setTextColor(0xff2E7D32.toInt()) // Dark Green
@@ -141,6 +213,15 @@ class MainActivity : Activity() {
 
         outboxView.text = sessionStore.pendingSessions().size.toString() +
             " completed session(s) waiting to sync."
+    }
+
+    private fun updateTimer() {
+        val elapsed = sessionStore.elapsedSessionMillis()
+        timerText.visibility = if (elapsed == null) View.GONE else View.VISIBLE
+        if (elapsed != null) {
+            val seconds = elapsed / 1_000
+            timerText.text = String.format(Locale.getDefault(), "%02d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60)
+        }
     }
 
     private fun handleNfcIntent(intent: Intent?): Boolean {
@@ -164,8 +245,11 @@ class MainActivity : Activity() {
         val activeStartedAt = sessionStore.activeStartedAtMillis()
         val stoppedAt = sessionStore.stoppedAtMillis()
 
-        if (activeStartedAt == null) {
+        if (activeStartedAt == null || sessionStore.stoppedSessionExpired()) {
             sessionStore.startSession()
+            subjectField.text.clear()
+            chapterField.text.clear()
+            notesField.text.clear()
             Toast.makeText(this, "Session started", Toast.LENGTH_SHORT).show()
         } else if (stoppedAt == null) {
             sessionStore.markStoppedAt()

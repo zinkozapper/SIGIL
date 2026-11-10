@@ -3,11 +3,6 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-val apiBaseUrl = providers.gradleProperty("sigilApiBaseUrl")
-    .orElse("http://192.168.223.11:3000/")
-    .get()
-    .let { if (it.endsWith("/")) it else "$it/" }
-
 android {
     namespace = "com.sigil.client"
     compileSdk = 35
@@ -24,14 +19,10 @@ android {
         versionCode = 1
         versionName = "0.1.0"
 
-        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
-    }
-
-    buildFeatures {
-        buildConfig = true
     }
 }
 
 dependencies {
     implementation("androidx.work:work-runtime-ktx:2.9.1")
+    testImplementation("junit:junit:4.13.2")
 }
