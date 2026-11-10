@@ -10,4 +10,9 @@ module DashboardHelper
       "#{minutes}m"
     end
   end
+
+  def chart_duration(seconds)
+    seconds = seconds.to_i
+    "#{seconds / 3_600}h #{seconds % 3_600 / 60}m #{seconds % 60}s"
+  end
 end

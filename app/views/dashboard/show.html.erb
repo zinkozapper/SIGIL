@@ -52,16 +52,25 @@
             <h3><%= title %></h3>
             <span><%= metric == :duration_seconds ? format_duration(@activity.sum { |period| period[metric] }) : number_with_delimiter(@activity.sum { |period| period[metric] }) %> total</span>
           </div>
-          <div class="activity-chart" style="--columns: <%= @activity.size %>" role="img" aria-label="<%= title %> from <%= @activity.first[:start_date] %> to <%= @activity.last[:end_date] %>">
+          <div class="chart-plot">
+            <div class="chart-y-axis" aria-hidden="true">
+              <% 4.downto(0) do |tick| %>
+                <span><%= metric == :duration_seconds ? chart_duration((maximum * tick / 4.0).round) : number_with_precision(maximum * tick / 4.0, precision: 2, strip_insignificant_zeros: true) %></span>
+              <% end %>
+            </div>
+          <div class="activity-chart" style="--columns: <%= @activity.size %>" aria-label="<%= title %> from <%= @activity.first[:start_date] %> to <%= @activity.last[:end_date] %>">
             <% @activity.each do |period| %>
               <% value = period[metric] %>
               <% description = metric == :duration_seconds ? format_duration(value) : pluralize(value, "session") %>
+              <% days = @daily_activity.select { |day| day[:date].between?(period[:start_date], period[:end_date]) } %>
+              <% hover_text = days.map { |day| "#{day[:date].strftime('%b %-d, %Y')}: #{chart_duration(day[:duration_seconds])} · #{pluralize(day[:session_count], 'session')}" }.join("\n") %>
               <div class="chart-column">
-                <div class="chart-bar-track">
-                  <div class="chart-bar <%= "chart-bar-sessions" if metric == :session_count %>" style="height: <%= (value.to_f / maximum * 100).round %>%" title="<%= period[:start_date].strftime("%b %-d") %><%= " – #{period[:end_date].strftime("%b %-d")}" if period[:start_date] != period[:end_date] %>: <%= description %>"></div>
-                </div>
+                <%= link_to dashboard_path(range: @range, period: period[:start_date].iso8601, anchor: "period-details"), class: "chart-bar-track", title: hover_text, aria: { label: "#{period[:start_date].strftime('%b %-d, %Y')}#{" to #{period[:end_date].strftime('%b %-d, %Y')}" if period[:start_date] != period[:end_date]}: #{description}. View sessions." } do %>
+                  <span class="chart-bar <%= "chart-bar-sessions" if metric == :session_count %>" style="height: <%= (value.to_f / maximum * 100).round %>%"></span>
+                <% end %>
               </div>
             <% end %>
+          </div>
           </div>
           <div class="chart-axis"><span><%= @activity.first[:start_date].strftime("%b %-d") %></span><span><%= @activity.last[:end_date].strftime("%b %-d") %></span></div>
           <% if @activity.sum { |period| period[metric] }.zero? %>
@@ -71,6 +80,38 @@
       <% end %>
     </div>
   </section>
+
+  <% if @selected_period %>
+    <section class="dashboard-panel" id="period-details" aria-labelledby="period-heading">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Selected activity</p>
+          <h2 id="period-heading">Sessions on <%= @selected_period[:start_date].strftime("%b %-d, %Y") %><%= " – #{@selected_period[:end_date].strftime('%b %-d, %Y')}" if @selected_period[:start_date] != @selected_period[:end_date] %></h2>
+        </div>
+        <p class="panel-caption"><%= pluralize(@period_sessions.size, "session") %> · <%= chart_duration(@selected_period[:duration_seconds]) %></p>
+      </div>
+      <% if @period_sessions.any? %>
+        <div class="table-wrapper">
+          <table class="sessions-table">
+            <thead><tr><th scope="col">Started</th><th scope="col">Subject</th><th scope="col">Chapter</th><th scope="col">Notes</th><th scope="col">Duration</th></tr></thead>
+            <tbody>
+              <% @period_sessions.each do |session| %>
+                <tr>
+                  <td><%= session.started_at.in_time_zone.strftime("%b %-d, %Y %H:%M") %></td>
+                  <td><%= session.subject.presence || "—" %></td>
+                  <td><%= session.chapter.presence || "—" %></td>
+                  <td><%= session.notes.presence || "—" %></td>
+                  <td><%= chart_duration(session.duration_seconds) %></td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      <% else %>
+        <p class="chart-empty">No sessions in this period.</p>
+      <% end %>
+    </section>
+  <% end %>
 
   <section class="dashboard-panel">
     <div class="panel-heading">

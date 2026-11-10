@@ -36,5 +36,12 @@ class DashboardController < ApplicationController
         session_count: days.sum { |day| day[:session_count] }
       }
     end
+
+    @selected_period = @activity.find { |period| period[:start_date].iso8601 == params[:period] }
+    if @selected_period
+      @period_sessions = StudySession.where(
+        started_at: @selected_period[:start_date].beginning_of_day..@selected_period[:end_date].end_of_day
+      ).order(started_at: :desc)
+    end
   end
 end

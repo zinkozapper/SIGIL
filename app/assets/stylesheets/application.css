@@ -141,6 +141,8 @@ h2 {
 }
 
 .activity-chart {
+  flex: 1;
+  min-width: 0;
   display: grid;
   grid-template-columns: repeat(var(--columns), minmax(0, 1fr));
   align-items: end;
@@ -165,7 +167,10 @@ h2 {
   align-items: end;
   height: 100%;
   border-bottom: 1px solid var(--line);
+  text-decoration: none;
 }
+
+.chart-bar-track:hover, .chart-bar-track:focus-visible { background: rgba(63, 93, 75, 0.12); outline: 1px solid var(--accent); }
 
 .chart-bar {
   width: 100%;
@@ -207,6 +212,10 @@ h2 {
 .chart-bar-sessions { background: #bd916b; }
 .chart-axis { display: flex; justify-content: space-between; margin-top: 10px; }
 .chart-empty { margin: 16px 0 0; }
+.chart-plot { display: flex; gap: 8px; }
+.chart-y-axis { display: flex; flex: 0 0 65px; flex-direction: column; justify-content: space-between; height: 170px; color: var(--muted); text-align: right; white-space: nowrap; font: 0.65rem ui-sans-serif, system-ui, sans-serif; }
+.chart-plot + .chart-axis { margin-left: 73px; }
+.sessions-table td:nth-child(4) { white-space: normal; overflow-wrap: anywhere; }
 
 .table-wrapper {
   overflow-x: auto;
