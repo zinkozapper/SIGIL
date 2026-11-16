@@ -1,6 +1,8 @@
 package com.sigil.client
 
 import java.net.URI
+import java.net.HttpURLConnection
+import java.net.URL
 
 fun normalizeServerUrl(input: String, portInput: String): String? {
     val value = input.trim()
@@ -18,5 +20,17 @@ fun normalizeServerUrl(input: String, portInput: String): String? {
         null
     } catch (_: java.net.URISyntaxException) {
         null
+    }
+}
+
+fun checkServerHealth(baseUrl: String): Int {
+    val connection = URL("$baseUrl/up").openConnection() as HttpURLConnection
+    return try {
+        connection.connectTimeout = 5_000
+        connection.readTimeout = 5_000
+        connection.instanceFollowRedirects = false
+        connection.responseCode
+    } finally {
+        connection.disconnect()
     }
 }

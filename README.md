@@ -1,6 +1,6 @@
 # SIGIL
 
-SIGIL records study sessions started and ended by tapping an NFC tag. The Android app keeps completed sessions in a local outbox and syncs them to a Rails API. A web dashboard summarizes saved sessions.
+SIGIL records study sessions started and stopped with Android buttons or an NFC tag. The Android app keeps completed sessions in a local outbox and syncs them to a Rails API. A web dashboard summarizes saved sessions.
 
 ## Components
 
@@ -52,7 +52,7 @@ Docker stores SQLite data in the `sigil_storage` volume. `docker compose down -v
 }
 ```
 
-`client_session_id`, `started_at`, and `ended_at` are required. Subject, chapter, notes, and metadata are optional. The server calculates `duration_seconds` from the timestamps.
+`client_session_id`, `started_at`, and `ended_at` are required. Subject, chapter, notes, and metadata are optional. The server calculates `duration_seconds` from the timestamps, excluding optional `metadata.paused_duration_millis`. This value must be a non-negative integer no greater than the elapsed session time.
 
 - `201 Created` — session saved.
 - `200 OK` — duplicate session ID; safe to retry.

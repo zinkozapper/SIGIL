@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
+import android.widget.Button
 import android.widget.TextView
 import android.widget.LinearLayout
 import android.view.View
@@ -60,6 +61,14 @@ class SuccessActivity : Activity() {
             setPadding(0, dp(8), 0, 0)
         }
         layout.addView(debugText)
+
+        layout.addView(Button(this).apply {
+            text = "Cancel"
+            setOnClickListener {
+                sessionStore.cancelSession()
+                finish()
+            }
+        })
 
         setContentView(layout)
         

@@ -29,6 +29,23 @@ class StudySessionsTest < ActionDispatch::IntegrationTest
     assert_equal @payload[:metadata].stringify_keys, response_body["metadata"]
   end
 
+  test "excludes paused time from the recorded duration" do
+    post_session(@payload.merge(metadata: { paused_duration_millis: 600_500 }))
+
+    assert_response :created
+    assert_equal 2_100, response.parsed_body["duration_seconds"]
+    assert_equal 600_500, response.parsed_body.dig("metadata", "paused_duration_millis")
+  end
+
+  test "rejects invalid paused durations" do
+    [ -1, 2_700_001, 10**400, "1000", nil ].each do |duration|
+      post_session(@payload.merge(metadata: { paused_duration_millis: duration }))
+
+      assert_response :unprocessable_entity
+      assert response.parsed_body["errors"].key?("metadata")
+    end
+  end
+
   test "returns the existing session for a duplicate client session ID" do
     post_session(@payload)
     created_id = response.parsed_body["id"]

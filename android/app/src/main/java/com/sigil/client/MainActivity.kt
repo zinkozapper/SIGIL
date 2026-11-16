@@ -21,6 +21,7 @@ import android.widget.Toast
 import com.sigil.client.data.SessionStore
 import com.sigil.client.sync.SyncWorker
 import java.net.URI
+import java.io.IOException
 import java.util.Locale
 
 class MainActivity : Activity() {
@@ -28,8 +29,11 @@ class MainActivity : Activity() {
     private lateinit var mainLayout: LinearLayout
     private lateinit var statusText: TextView
     private lateinit var timerText: TextView
+    private lateinit var sessionButton: Button
     private lateinit var cancelButton: Button
+    private lateinit var pauseButton: Button
     private lateinit var surveyContainer: LinearLayout
+    private lateinit var syncAddressContainer: LinearLayout
     private lateinit var subjectField: EditText
     private lateinit var chapterField: EditText
     private lateinit var notesField: EditText
@@ -91,6 +95,11 @@ class MainActivity : Activity() {
         }
         mainLayout.addView(timerText)
 
+        sessionButton = Button(this).apply {
+            setOnClickListener { toggleSession("manual") }
+        }
+        mainLayout.addView(sessionButton)
+
         cancelButton = Button(this).apply {
             text = "Cancel"
             setOnClickListener {
@@ -99,6 +108,14 @@ class MainActivity : Activity() {
             }
         }
         mainLayout.addView(cancelButton)
+
+        pauseButton = Button(this).apply {
+            setOnClickListener {
+                sessionStore.togglePause()
+                updateUI()
+            }
+        }
+        mainLayout.addView(pauseButton)
 
         surveyContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -136,6 +153,11 @@ class MainActivity : Activity() {
         surveyContainer.addView(submitButton, marginParams(top = 20))
         mainLayout.addView(surveyContainer)
 
+        syncAddressContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        mainLayout.addView(syncAddressContainer, marginParams(top = 30))
+
         val savedServer = sessionStore.apiBaseUrl()?.let { URI(it) }
         val serverField = field("Server IP or URL").apply {
             setSingleLine(true)
@@ -151,8 +173,8 @@ class MainActivity : Activity() {
             addView(serverField, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 2f))
             addView(portField, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         }
-        mainLayout.addView(serverRow, marginParams(top = 30))
-        mainLayout.addView(Button(this).apply {
+        syncAddressContainer.addView(serverRow)
+        syncAddressContainer.addView(Button(this).apply {
             text = "Save sync address"
             setOnClickListener {
                 val url = normalizeServerUrl(serverField.text.toString(), portField.text.toString())
@@ -165,6 +187,38 @@ class MainActivity : Activity() {
                 }
             }
         })
+
+        val connectionStatus = TextView(this)
+        syncAddressContainer.addView(Button(this).apply {
+            text = "Test connection"
+            setOnClickListener {
+                val url = normalizeServerUrl(serverField.text.toString(), portField.text.toString())
+                if (url == null) {
+                    portField.error = "Enter a valid address and port (1–65535)"
+                } else {
+                    isEnabled = false
+                    connectionStatus.text = "Testing $url..."
+                    connectionStatus.setTextColor(0xff333333.toInt())
+                    Thread {
+                        val result = try {
+                            val status = checkServerHealth(url)
+                            if (status == 200) "Connected to $url" to true
+                            else "Connection to $url failed: HTTP $status" to false
+                        } catch (error: IOException) {
+                            "Connection to $url failed: ${error.localizedMessage ?: "network error"}" to false
+                        }
+                        runOnUiThread {
+                            if (!isDestroyed) {
+                                connectionStatus.text = result.first
+                                connectionStatus.setTextColor(if (result.second) 0xff2E7D32.toInt() else 0xffC62828.toInt())
+                                isEnabled = true
+                            }
+                        }
+                    }.start()
+                }
+            }
+        })
+        syncAddressContainer.addView(connectionStatus)
 
         val syncButton = Button(this).apply {
             text = "Sync pending sessions"
@@ -191,17 +245,22 @@ class MainActivity : Activity() {
         val stoppedAt = sessionStore.stoppedAtMillis()
 
         val isStarted = activeStartedAt != null && stoppedAt == null
-        cancelButton.visibility = if (isStarted) View.VISIBLE else View.GONE
+        sessionButton.visibility = if (stoppedAt == null) View.VISIBLE else View.GONE
+        sessionButton.text = if (isStarted) "Stop" else "Start"
+        cancelButton.visibility = if (activeStartedAt != null) View.VISIBLE else View.GONE
+        syncAddressContainer.visibility = if (activeStartedAt == null) View.VISIBLE else View.GONE
+        pauseButton.visibility = if (isStarted) View.VISIBLE else View.GONE
+        pauseButton.text = if (sessionStore.isPaused()) "Resume" else "Pause"
         updateTimer()
 
         if (activeStartedAt == null) {
             mainLayout.setBackgroundColor(0xffFAFAFA.toInt())
-            statusText.text = "Tap your SIGIL tag to start a session"
+            statusText.text = "Start a session or tap your SIGIL tag"
             statusText.setTextColor(0xff333333.toInt())
             surveyContainer.visibility = View.GONE
         } else if (isStarted) {
             mainLayout.setBackgroundColor(0xffE8F5E9.toInt()) // Light Green
-            statusText.text = "Session Started"
+            statusText.text = if (sessionStore.isPaused()) "Session paused" else "Session Started"
             statusText.setTextColor(0xff2E7D32.toInt()) // Dark Green
             surveyContainer.visibility = View.GONE
         } else {
@@ -237,16 +296,16 @@ class MainActivity : Activity() {
         val now = System.currentTimeMillis()
         if (now - lastNfcTapMillis < 1_500) return true
         lastNfcTapMillis = now
-        toggleSession()
+        toggleSession("nfc")
         return true
     }
 
-    private fun toggleSession() {
+    private fun toggleSession(trigger: String) {
         val activeStartedAt = sessionStore.activeStartedAtMillis()
         val stoppedAt = sessionStore.stoppedAtMillis()
 
         if (activeStartedAt == null || sessionStore.stoppedSessionExpired()) {
-            sessionStore.startSession()
+            sessionStore.startSession(trigger = trigger)
             subjectField.text.clear()
             chapterField.text.clear()
             notesField.text.clear()

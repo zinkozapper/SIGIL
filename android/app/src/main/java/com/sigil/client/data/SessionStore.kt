@@ -2,6 +2,7 @@ package com.sigil.client.data
 
 import android.content.Context
 import android.os.SystemClock
+import android.provider.Settings
 import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
@@ -9,6 +10,9 @@ import java.util.UUID
 
 class SessionStore(context: Context) {
     private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+    private val contentResolver = context.contentResolver
+
+    private fun bootCount(): Int = Settings.Global.getInt(contentResolver, Settings.Global.BOOT_COUNT, -1)
 
     fun apiBaseUrl(): String? = preferences.getString("api_base_url", null)
 
@@ -23,12 +27,18 @@ class SessionStore(context: Context) {
     }
 
     @Synchronized
-    fun startSession(startedAtMillis: Long = System.currentTimeMillis()) {
+    fun startSession(startedAtMillis: Long = System.currentTimeMillis(), trigger: String = "nfc") {
         preferences.edit()
             .putLong(ACTIVE_STARTED_AT, startedAtMillis)
             .putLong(ACTIVE_STARTED_ELAPSED, SystemClock.elapsedRealtime())
+            .putInt(ACTIVE_STARTED_BOOT, bootCount())
+            .putString(START_TRIGGER, trigger)
             .remove(STOPPED_AT)
             .remove(STOPPED_WALL_AT)
+            .remove(PAUSED_AT)
+            .remove(PAUSED_ELAPSED)
+            .remove(PAUSED_BOOT)
+            .remove(PAUSED_DURATION)
             .apply()
     }
 
@@ -37,19 +47,58 @@ class SessionStore(context: Context) {
         preferences.edit()
             .remove(ACTIVE_STARTED_AT)
             .remove(ACTIVE_STARTED_ELAPSED)
+            .remove(ACTIVE_STARTED_BOOT)
+            .remove(START_TRIGGER)
             .remove(STOPPED_AT)
             .remove(STOPPED_WALL_AT)
+            .remove(PAUSED_AT)
+            .remove(PAUSED_ELAPSED)
+            .remove(PAUSED_BOOT)
+            .remove(PAUSED_DURATION)
             .apply()
+    }
+
+    @Synchronized
+    fun isPaused(): Boolean = preferences.contains(PAUSED_AT)
+
+    @Synchronized
+    fun togglePause() {
+        if (activeStartedAtMillis() == null || stoppedAtMillis() != null) return
+        val editor = preferences.edit()
+        if (isPaused()) {
+            editor.putLong(PAUSED_DURATION, pausedDurationMillis())
+                .remove(PAUSED_AT)
+                .remove(PAUSED_ELAPSED)
+                .remove(PAUSED_BOOT)
+        } else {
+            editor.putLong(PAUSED_AT, System.currentTimeMillis())
+                .putLong(PAUSED_ELAPSED, SystemClock.elapsedRealtime())
+                .putInt(PAUSED_BOOT, bootCount())
+        }
+        editor.apply()
+    }
+
+    private fun pausedDurationMillis(): Long {
+        val total = preferences.getLong(PAUSED_DURATION, 0L)
+        if (!isPaused()) return total
+        return total + elapsedSince(
+            preferences.getLong(PAUSED_AT, 0L),
+            preferences.getLong(PAUSED_ELAPSED, -1L),
+            preferences.getInt(PAUSED_BOOT, -1),
+            System.currentTimeMillis(), SystemClock.elapsedRealtime(), bootCount()
+        )
     }
 
     @Synchronized
     fun elapsedSessionMillis(): Long? {
         val started = activeStartedAtMillis() ?: return null
         val stopped = stoppedAtMillis()
-        if (stopped != null) return (stopped - started).coerceAtLeast(0)
-        val elapsedStart = preferences.getLong(ACTIVE_STARTED_ELAPSED, -1L)
-        val elapsed = SystemClock.elapsedRealtime() - elapsedStart
-        return if (elapsedStart >= 0 && elapsed >= 0) elapsed else (System.currentTimeMillis() - started).coerceAtLeast(0)
+        val total = if (stopped != null) stopped - started else elapsedSince(
+            started, preferences.getLong(ACTIVE_STARTED_ELAPSED, -1L),
+            preferences.getInt(ACTIVE_STARTED_BOOT, -1),
+            System.currentTimeMillis(), SystemClock.elapsedRealtime(), bootCount()
+        )
+        return (total - pausedDurationMillis()).coerceAtLeast(0)
     }
 
     @Synchronized
@@ -69,11 +118,18 @@ class SessionStore(context: Context) {
     fun markStoppedAt(stoppedAtMillis: Long = System.currentTimeMillis()) {
         val startedAtMillis = activeStartedAtMillis() ?: return
         if (this.stoppedAtMillis() != null) return
-        val startedElapsed = preferences.getLong(ACTIVE_STARTED_ELAPSED, -1L)
-        val elapsed = if (startedElapsed >= 0) SystemClock.elapsedRealtime() - startedElapsed else -1L
-        val monotonicEnd = if (elapsed >= 0) startedAtMillis + elapsed else stoppedAtMillis
+        val elapsed = elapsedSince(
+            startedAtMillis, preferences.getLong(ACTIVE_STARTED_ELAPSED, -1L),
+            preferences.getInt(ACTIVE_STARTED_BOOT, -1),
+            stoppedAtMillis, SystemClock.elapsedRealtime(), bootCount()
+        )
+        val monotonicEnd = startedAtMillis + elapsed
         preferences.edit()
             .putLong(STOPPED_AT, maxOf(startedAtMillis, monotonicEnd))
+            .putLong(PAUSED_DURATION, pausedDurationMillis().coerceAtMost(maxOf(0L, monotonicEnd - startedAtMillis)))
+            .remove(PAUSED_AT)
+            .remove(PAUSED_ELAPSED)
+            .remove(PAUSED_BOOT)
             .putLong(STOPPED_WALL_AT, stoppedAtMillis)
             .apply()
     }
@@ -96,18 +152,15 @@ class SessionStore(context: Context) {
             endedAtMillis = endedAt,
             subject = subject.clean(),
             chapter = chapter.clean(),
+            pausedDurationMillis = preferences.getLong(PAUSED_DURATION, 0L),
+            trigger = preferences.getString(START_TRIGGER, "nfc") ?: "nfc",
             notes = notes.clean()
         )
 
         val updatedOutbox = pendingSessions().toMutableList()
         updatedOutbox += session
         savePendingSessions(updatedOutbox)
-        preferences.edit()
-            .remove(ACTIVE_STARTED_AT)
-            .remove(ACTIVE_STARTED_ELAPSED)
-            .remove(STOPPED_AT)
-            .remove(STOPPED_WALL_AT)
-            .apply()
+        cancelSession()
         return session
     }
 
@@ -126,6 +179,8 @@ class SessionStore(context: Context) {
                     endedAtMillis = item.getLong("ended_at_millis"),
                     subject = item.optionalString("subject"),
                     chapter = item.optionalString("chapter"),
+                    pausedDurationMillis = item.optLong("paused_duration_millis", 0L),
+                    trigger = item.optString("trigger", "nfc"),
                     notes = item.optionalString("notes")
                 )
                 if (session.endedAtMillis < session.startedAtMillis) {
@@ -158,6 +213,8 @@ class SessionStore(context: Context) {
                 put("ended_at_millis", session.endedAtMillis)
                 putOptional("subject", session.subject)
                 putOptional("chapter", session.chapter)
+                put("paused_duration_millis", session.pausedDurationMillis)
+                put("trigger", session.trigger)
                 putOptional("notes", session.notes)
             })
         }
@@ -179,8 +236,26 @@ class SessionStore(context: Context) {
         const val PREFERENCES_NAME = "sigil_client"
         const val ACTIVE_STARTED_AT = "active_started_at"
         const val ACTIVE_STARTED_ELAPSED = "active_started_elapsed"
+        const val ACTIVE_STARTED_BOOT = "active_started_boot"
+        const val START_TRIGGER = "start_trigger"
         const val STOPPED_AT = "stopped_at"
+        const val PAUSED_AT = "paused_at"
+        const val PAUSED_ELAPSED = "paused_elapsed"
+        const val PAUSED_BOOT = "paused_boot"
+        const val PAUSED_DURATION = "paused_duration_millis"
         const val STOPPED_WALL_AT = "stopped_wall_at"
         const val OUTBOX = "completed_session_outbox"
     }
+}
+
+internal fun elapsedSince(
+    wallStart: Long, elapsedStart: Long, startBoot: Int,
+    wallNow: Long, elapsedNow: Long, currentBoot: Int
+): Long {
+    val duration = if (startBoot >= 0 && startBoot == currentBoot && elapsedStart >= 0 && elapsedNow >= elapsedStart) {
+        elapsedNow - elapsedStart
+    } else {
+        wallNow - wallStart
+    }
+    return duration.coerceAtLeast(0)
 }

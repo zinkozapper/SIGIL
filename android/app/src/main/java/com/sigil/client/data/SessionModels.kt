@@ -8,6 +8,8 @@ data class PendingSession(
     val clientSessionId: String,
     val startedAtMillis: Long,
     val endedAtMillis: Long,
+    val pausedDurationMillis: Long,
+    val trigger: String,
     val subject: String?,
     val chapter: String?,
     val notes: String?
@@ -21,7 +23,8 @@ data class PendingSession(
         putOptional("notes", notes)
         put("metadata", JSONObject().apply {
             put("source", "sigil-android")
-            put("trigger", "nfc")
+            put("trigger", trigger)
+            put("paused_duration_millis", pausedDurationMillis)
         })
     }
 
